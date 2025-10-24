@@ -53,10 +53,10 @@ jobs:
     - name: CMake Configure
       run: |
         cd opencv
-        mkdir build && cd build
+        mkdir -p build && cd build
         cmake -G "MinGW Makefiles" \
           -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_INSTALL_PREFIX=../install \
+          -DCMAKE_INSTALL_PREFIX=install \
           -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
           -DWITH_GSTREAMER=ON \
           -DWITH_FFMPEG=OFF \
@@ -82,23 +82,25 @@ jobs:
     - name: Build OpenCV
       run: |
         cd opencv/build
-        mingw32-make -j3
+        mingw32-make -j3 || exit 1
 
-    - name: Install
+    - name: Install OpenCV
       run: |
         cd opencv/build
         mingw32-make install
+        echo "Install directory contents:"
+        ls -la ../install || true
 
     - name: Package
       run: |
-        mkdir -p ../artifacts
-        cp -r ../install/* ../artifacts/
-        cd ..
+        mkdir -p opencv/artifacts
+        cp -r opencv/install/* opencv/artifacts/ || echo "Warning: No files in install/"
+        cd opencv
         zip -r opencv-gstreamer-mingw.zip artifacts/
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: opencv-gstreamer-mingw-build
-        path: opencv-gstreamer-mingw.zip
-        retention-days: 30س
+        path: opencv/opencv-gstreamer-mingw.zip
+        retention-days: 30
