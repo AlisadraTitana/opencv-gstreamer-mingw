@@ -23,22 +23,34 @@ jobs:
           unzip
           wget
 
-    - name: Install GStreamer (MinGW)
+    - name: Install GStreamer (ZIP - NO MSI!)
       shell: msys2 {0}
       run: |
-        curl -L -o gstreamer.msi https://gstreamer.freedesktop.org/data/pkg/windows/1.24.8/mingw/gstreamer-1.0-mingw-x86_64-1.24.8.msi
-        curl -L -o gstreamer-dev.msi https://gstreamer.freedesktop.org/data/pkg/windows/1.24.8/mingw/gstreamer-1.0-devel-mingw-x86_64-1.24.8.msi
-        msiexec /i gstreamer.msi /quiet /qn
-        msiexec /i gstreamer-dev.msi /quiet /qn
-        echo "PKG_CONFIG_PATH=/mingw64/lib/pkgconfig" >> $GITHUB_ENV
+        # مسیر نصب GStreamer
+        GST_ROOT="/c/gstreamer"
+        mkdir -p "$GST_ROOT"
+
+        # دانلود ZIP (Runtime + Dev)
+        curl -L -o gstreamer-runtime.zip https://gstreamer.freedesktop.org/data/pkg/windows/1.24.8/mingw/gstreamer-1.0-mingw-x86_64-1.24.8.zip
+        curl -L -o gstreamer-devel.zip https://gstreamer.freedesktop.org/data/pkg/windows/1.24.8/mingw/gstreamer-1.0-devel-mingw-x86_64-1.24.8.zip
+
+        # استخراج
+        unzip -q gstreamer-runtime.zip -d "$GST_ROOT"
+        unzip -q gstreamer-devel.zip -d "$GST_ROOT"
+
+        # تنظیم PATH و PKG_CONFIG
+        echo "GST_ROOT=$GST_ROOT" >> $GITHUB_ENV
+        echo "PATH=$GST_ROOT/bin:$PATH" >> $GITHUB_ENV
+        echo "PKG_CONFIG_PATH=$GST_ROOT/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+        echo "GST_PLUGIN_SYSTEM_PATH=$GST_ROOT/lib/gstreamer-1.0" >> $GITHUB_ENV
 
     - name: Download OpenCV + Contrib
       shell: msys2 {0}
       run: |
         curl -L -o opencv.zip https://github.com/opencv/opencv/archive/4.10.0.zip
         curl -L -o opencv_contrib.zip https://github.com/opencv/opencv_contrib/archive/4.10.0.zip
-        unzip opencv.zip
-        unzip opencv_contrib.zip
+        unzip -q opencv.zip
+        unzip -q opencv_contrib.zip
         mv opencv-4.10.0 opencv
         mv opencv_contrib-4.10.0 opencv_contrib
 
@@ -80,7 +92,7 @@ jobs:
           -DPYTHON3_EXECUTABLE="$PYTHON_EXEC" \
           -DPYTHON3_INCLUDE_DIR="$PYTHON_INC" \
           -DPYTHON3_PACKAGES_PATH="$PYTHON_LIB_DIR" \
-          -DPKG_CONFIG_PATH="/mingw64/lib/pkgconfig" \
+          -DPKG_CONFIG_PATH="/c/gstreamer/lib/pkgconfig" \
           ..
 
     - name: Build OpenCV
@@ -100,6 +112,7 @@ jobs:
       run: |
         mkdir ../artifacts
         cp -r ../install/* ../artifacts/
+        cp -r /c/gstreamer/* ../artifacts/  # کپی GStreamer هم
         cd ..
         zip -r opencv-gstreamer-mingw.zip artifacts/
 
