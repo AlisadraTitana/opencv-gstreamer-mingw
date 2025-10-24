@@ -42,14 +42,15 @@ jobs:
         mv opencv-4.10.0 opencv
         mv opencv_contrib-4.10.0 opencv_contrib
 
-    - name: Configure Python paths
+    - name: Configure Python paths (MSYS2-specific)
       run: |
         PYTHON_EXEC=$(which python)
-        PYTHON_INC=$(python -c "import distutils.sysconfig; print(distutils.sysconfig.get_python_inc())")
-        PYTHON_LIB_DIR=$(python -c "import distutils.sysconfig; print(distutils.sysconfig.get_python_lib(plat_specific=1))")
+        PYTHON_VERSION=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+        PYTHON_INC="/mingw64/include/python${PYTHON_VERSION}"
+        PYTHON_LIB="/mingw64/lib/python${PYTHON_VERSION}/site-packages"
         echo "PYTHON_EXEC=$PYTHON_EXEC" >> $GITHUB_ENV
         echo "PYTHON_INC=$PYTHON_INC" >> $GITHUB_ENV
-        echo "PYTHON_LIB_DIR=$PYTHON_LIB_DIR" >> $GITHUB_ENV
+        echo "PYTHON_LIB=$PYTHON_LIB" >> $GITHUB_ENV
 
     - name: CMake Configure
       run: |
@@ -77,7 +78,8 @@ jobs:
           -DCMAKE_C_FLAGS="-Wa,-mbig-obj" \
           -DPYTHON3_EXECUTABLE="$PYTHON_EXEC" \
           -DPYTHON3_INCLUDE_DIR="$PYTHON_INC" \
-          -DPYTHON3_PACKAGES_PATH="$PYTHON_LIB_DIR" \
+          -DPYTHON3_PACKAGES_PATH="$PYTHON_LIB" \
+          -DPYTHON3_LIBRARY="" \
           ..
 
     - name: Build OpenCV
@@ -89,15 +91,15 @@ jobs:
       run: |
         cd opencv/build
         mingw32-make install
-        echo "=== Install Directory ==="
-        ls -la ../install || echo "ERROR: install is empty!"
+        echo "=== Install Directory (in build/) ==="
+        ls -la install
         echo "=== Python Bindings ==="
-        find ../install -name "cv2*.pyd" || echo "No cv2.pyd found!"
+        find install -name "cv2*.pyd" -o -name "opencv_world*.dll"
 
     - name: Package
       run: |
         mkdir -p opencv/artifacts
-        cp -r opencv/install/* opencv/artifacts/ || echo "Warning: No files in install/"
+        cp -r opencv/build/install/* opencv/artifacts/
         cd opencv
         7z a opencv-gstreamer-mingw.7z artifacts/
 
