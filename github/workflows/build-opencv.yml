@@ -1,0 +1,116 @@
+name: Build OpenCV with GStreamer + MinGW
+
+on: [push, workflow_dispatch]  # اجرا با push یا دستی
+
+jobs:
+  build:
+    runs-on: windows-latest  # ویندوز سرور
+    strategy:
+      matrix:
+        arch: [x64]  # فقط 64-bit
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup MSYS2 (for MinGW)
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        update: true
+        install: >-
+          mingw-w64-x86_64-gcc
+          mingw-w64-x86_64-cmake
+          mingw-w64-x86_64-make
+          mingw-w64-x86_64-python
+
+    - name: Install GStreamer (MinGW version)
+      shell: msys2 {0}
+      run: |
+        curl -L -o gstreamer.msi https://gstreamer.freedesktop.org/data/pkg/windows/1.0/mingw_x86_64/gstreamer-1.0-mingw-x86_64-1.24.8.msi
+        curl -L -o gstreamer-dev.msi https://gstreamer.freedesktop.org/data/pkg/windows/1.0/mingw_x86_64/gstreamer-1.0-devel-mingw-x86_64-1.24.8.msi
+        msiexec /i gstreamer.msi /quiet /qn
+        msiexec /i gstreamer-dev.msi /quiet /qn
+        echo "PKG_CONFIG_PATH=/mingw64/lib/pkgconfig" >> $GITHUB_ENV
+
+    - name: Download OpenCV sources
+      shell: msys2 {0}
+      run: |
+        curl -L -o opencv.zip https://github.com/opencv/opencv/archive/4.10.0.zip
+        curl -L -o opencv_contrib.zip https://github.com/opencv/opencv_contrib/archive/4.10.0.zip
+        unzip opencv.zip
+        unzip opencv_contrib.zip
+        mv opencv-4.10.0 opencv
+        mv opencv_contrib-4.10.0 opencv_contrib
+
+    - name: Setup Python paths
+      shell: msys2 {0}
+      run: |
+        PYTHON_EXEC=$(which python)
+        PYTHON_INC=$(python -c "from distutils.sysconfig import get_python_inc; print(get_python_inc())")
+        PYTHON_LIB=$(python -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")
+        echo "PYTHON_EXEC=$PYTHON_EXEC" >> $GITHUB_ENV
+        echo "PYTHON_INC=$PYTHON_INC" >> $GITHUB_ENV
+        echo "PYTHON_LIB=$PYTHON_LIB" >> $GITHUB_ENV
+
+    - name: Configure OpenCV with CMake
+      shell: msys2 {0}
+      run: |
+        cd opencv
+        mkdir build && cd build
+        export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig"
+        cmake -G "MinGW Makefiles" ^
+          -DCMAKE_BUILD_TYPE=Release ^
+          -DCMAKE_INSTALL_PREFIX=../install ^
+          -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules ^
+          -DWITH_GSTREAMER=ON ^
+          -DWITH_FFMPEG=OFF ^
+          -DWITH_QT=OFF ^
+          -DWITH_OPENGL=OFF ^
+          -DBUILD_opencv_world=ON ^
+          -DBUILD_opencv_python3=ON ^
+          -DBUILD_EXAMPLES=OFF ^
+          -DBUILD_TESTS=OFF ^
+          -DBUILD_PERF_TESTS=OFF ^
+          -DBUILD_JAVA=OFF ^
+          -DBUILD_opencv_ts=OFF ^
+          -DBUILD_opencv_apps=OFF ^
+          -DWITH_IPP=OFF ^
+          -DWITH_CUDA=OFF ^
+          -DWITH_VULKAN=OFF ^
+          -DWITH_DIRECTX=OFF ^
+          -DCMAKE_C_COMPILER=gcc ^
+          -DCMAKE_CXX_COMPILER=g++ ^
+          -DCMAKE_CXX_FLAGS="-Wa,-mbig-obj" ^
+          -DCMAKE_C_FLAGS="-Wa,-mbig-obj" ^
+          -DPYTHON3_EXECUTABLE=$PYTHON_EXEC ^
+          -DPYTHON3_INCLUDE_DIR=$PYTHON_INC ^
+          -DPYTHON3_LIBRARY=$PYTHON_LIB ^
+          -DPYTHON3_PACKAGES_PATH=$PYTHON_LIB ^
+          -DPKG_CONFIG_PATH="/mingw64/lib/pkgconfig" ^
+          ..
+
+    - name: Build OpenCV
+      shell: msys2 {0}
+      run: |
+        cd opencv/build
+        mingw32-make -j4
+
+    - name: Install OpenCV
+      shell: msys2 {0}
+      run: |
+        cd opencv/build
+        mingw32-make install
+
+    - name: Package outputs
+      shell: msys2 {0}
+      run: |
+        mkdir artifacts
+        cp -r opencv/install/* artifacts/
+        zip -r opencv-gstreamer-mingw.zip artifacts/
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: opencv-gstreamer-build
+        path: opencv-gstreamer-mingw.zip
+        retention-days: 30
