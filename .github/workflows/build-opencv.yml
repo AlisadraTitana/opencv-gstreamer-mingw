@@ -30,7 +30,7 @@ jobs:
           mingw-w64-x86_64-gst-plugins-ugly
           mingw-w64-x86_64-gst-libav
           mingw-w64-x86_64-gst-devtools
-          unzip  # اضافه شد!
+          unzip
 
     - name: Download OpenCV + Contrib
       run: |
@@ -101,4 +101,4 @@ jobs:
       with:
         name: opencv-gstreamer-mingw-build
         path: opencv-gstreamer-mingw.zip
-        retention-days: 30
+        retention-days: 30س
