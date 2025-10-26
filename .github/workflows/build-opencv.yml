@@ -1,106 +1,62 @@
-name: Build OpenCV with Python and GStreamer (Fixed)
+name: Build OpenCV with GStreamer (MinGW)
 
-on: [push, workflow_dispatch]
+on:
+  push:
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
 
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Setup MSYS2 and dependencies
-      uses: msys2/setup-msys2@v2
-      with:
-        msystem: MINGW64
-        update: true
-        install: >-
-          base-devel
-          mingw-w64-x86_64-toolchain
-          mingw-w64-x86_64-cmake
-          mingw-w64-x86_64-python
-          mingw-w64-x86_64-python-pip
-          mingw-w64-x86_64-gstreamer
-          mingw-w64-x86_64-gst-plugins-base
-          mingw-w64-x86_64-gst-plugins-good
-          mingw-w64-x86_64-gst-plugins-bad
-          mingw-w64-x86_64-gst-plugins-ugly
-          mingw-w64-x86_64-gst-libav
-          mingw-w64-x86_64-gst-devtools
-          unzip
-          p7zip
+      - name: Install dependencies
+        shell: bash
+        run: |
+          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
+          choco install ninja -y
+          choco install git -y
+          choco install mingw -y
+          echo "CMAKE and MinGW installed"
 
-    - name: Download OpenCV + Contrib
-      run: |
-        curl -L -o opencv.zip https://github.com/opencv/opencv/archive/4.10.0.zip
-        curl -L -o opencv_contrib.zip https://github.com/opencv/opencv_contrib/archive/4.10.0.zip
-        unzip -q opencv.zip
-        unzip -q opencv_contrib.zip
-        mv opencv-4.10.0 opencv
-        mv opencv_contrib-4.10.0 opencv_contrib
+      - name: Clone OpenCV sources
+        shell: bash
+        run: |
+          git clone --branch 4.x https://github.com/opencv/opencv.git
+          git clone --branch 4.x https://github.com/opencv/opencv_contrib.git
 
-    - name: Install numpy
-      run: |
-        python -m pip install --upgrade pip
-        python -m pip install numpy
+      - name: Configure OpenCV with CMake
+        shell: bash
+        run: |
+          cmake -G "MinGW Makefiles" -B build -S opencv \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install \
+            -DOPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules \
+            -DWITH_GSTREAMER=ON \
+            -DWITH_FFMPEG=ON \
+            -DWITH_OPENCL=OFF \
+            -DWITH_CUDA=OFF \
+            -DBUILD_opencv_world=ON \
+            -DBUILD_TESTS=OFF \
+            -DBUILD_PERF_TESTS=OFF \
+            -DBUILD_EXAMPLES=OFF \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DOPENCV_GENERATE_PKGCONFIG=OFF
 
-    - name: Detect Python paths
-      run: |
-        echo "PYTHON_EXEC=$(which python)" >> $GITHUB_ENV
-        echo "PYTHON_INC=$(python -c 'from sysconfig import get_paths; print(get_paths()[\"include\"])')" >> $GITHUB_ENV
-        echo "PYTHON_LIB=/mingw64/lib/libpython3.12.a" >> $GITHUB_ENV
+      - name: Build OpenCV
+        shell: bash
+        run: |
+          cmake --build build --config Release -- -j4
 
-    - name: Configure CMake
-      run: |
-        cd opencv
-        mkdir -p build && cd build
-        cmake -G "MinGW Makefiles" \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_INSTALL_PREFIX=install \
-          -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
-          -DWITH_GSTREAMER=ON \
-          -DWITH_FFMPEG=OFF \
-          -DBUILD_opencv_python3=ON \
-          -DBUILD_NEW_PYTHON_SUPPORT=ON \
-          -DINSTALL_PYTHON_EXAMPLES=OFF \
-          -DBUILD_EXAMPLES=OFF \
-          -DBUILD_TESTS=OFF \
-          -DBUILD_PERF_TESTS=OFF \
-          -DBUILD_JAVA=OFF \
-          -DWITH_CUDA=OFF \
-          -DWITH_IPP=OFF \
-          -DPYTHON3_EXECUTABLE="$PYTHON_EXEC" \
-          -DPYTHON3_INCLUDE_DIR="$PYTHON_INC" \
-          -DPYTHON3_LIBRARY="$PYTHON_LIB" \
-          -DOPENCV_GENERATE_PKGCONFIG=ON \
-          -DCMAKE_C_COMPILER=gcc \
-          -DCMAKE_CXX_COMPILER=g++ \
-          -DCMAKE_C_FLAGS="-Wa,-mbig-obj" \
-          -DCMAKE_CXX_FLAGS="-Wa,-mbig-obj" \
-          ..
+      - name: Install OpenCV
+        shell: bash
+        run: |
+          cmake --install build
 
-    - name: Build OpenCV
-      run: |
-        cd opencv/build
-        mingw32-make -j4
-
-    - name: Install OpenCV
-      run: |
-        cd opencv/build
-        mingw32-make install
-        echo "=== Python Bindings ==="
-        find install -name "cv2*.pyd"
-
-    - name: Package
-      run: |
-        cd opencv/build
-        7z a ../../opencv-python-build.7z install/
-
-    - uses: actions/upload-artifact@v4
-      with:
-        name: opencv-python-gstreamer
-        path: opencv-python-build.7z
-        retention-days: 30
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencv-windows-gstreamer
+          path: install
