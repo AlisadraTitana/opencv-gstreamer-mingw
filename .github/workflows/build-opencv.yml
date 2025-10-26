@@ -1,4 +1,4 @@
-name: Build OpenCV with GStreamer + Python Bindings
+name: Build OpenCV with Python and GStreamer (Fixed)
 
 on: [push, workflow_dispatch]
 
@@ -10,10 +10,9 @@ jobs:
         shell: msys2 {0}
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-    - name: Setup MSYS2 + Install dependencies
+    - name: Setup MSYS2 and dependencies
       uses: msys2/setup-msys2@v2
       with:
         msystem: MINGW64
@@ -43,17 +42,16 @@ jobs:
         mv opencv-4.10.0 opencv
         mv opencv_contrib-4.10.0 opencv_contrib
 
+    - name: Install numpy
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install numpy
+
     - name: Detect Python paths
       run: |
-        PYTHON_EXEC=$(which python)
-        PYTHON_VERSION=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-        PYTHON_INC="/mingw64/include/python${PYTHON_VERSION}"
-        PYTHON_LIB=$(python -c "import sysconfig; print(sysconfig.get_config_var('LIBRARY'))")
-        PYTHON_LIB_DIR=$(python -c "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))")
-        echo "PYTHON_EXEC=$PYTHON_EXEC" >> $GITHUB_ENV
-        echo "PYTHON_INC=$PYTHON_INC" >> $GITHUB_ENV
-        echo "PYTHON_LIB_DIR=$PYTHON_LIB_DIR" >> $GITHUB_ENV
-        echo "PYTHON_LIB=$PYTHON_LIB" >> $GITHUB_ENV
+        echo "PYTHON_EXEC=$(which python)" >> $GITHUB_ENV
+        echo "PYTHON_INC=$(python -c 'from sysconfig import get_paths; print(get_paths()[\"include\"])')" >> $GITHUB_ENV
+        echo "PYTHON_LIB=/mingw64/lib/libpython3.12.a" >> $GITHUB_ENV
 
     - name: Configure CMake
       run: |
@@ -62,29 +60,26 @@ jobs:
         cmake -G "MinGW Makefiles" \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=install \
-          -DOPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules \
+          -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
           -DWITH_GSTREAMER=ON \
           -DWITH_FFMPEG=OFF \
-          -DWITH_QT=OFF \
-          -DWITH_OPENGL=OFF \
-          -DBUILD_opencv_world=ON \
           -DBUILD_opencv_python3=ON \
-          -DINSTALL_PYTHON_EXAMPLES=OFF \
           -DBUILD_NEW_PYTHON_SUPPORT=ON \
+          -DINSTALL_PYTHON_EXAMPLES=OFF \
           -DBUILD_EXAMPLES=OFF \
           -DBUILD_TESTS=OFF \
           -DBUILD_PERF_TESTS=OFF \
           -DBUILD_JAVA=OFF \
-          -DWITH_IPP=OFF \
           -DWITH_CUDA=OFF \
+          -DWITH_IPP=OFF \
           -DPYTHON3_EXECUTABLE="$PYTHON_EXEC" \
           -DPYTHON3_INCLUDE_DIR="$PYTHON_INC" \
-          -DPYTHON3_LIBRARY="$PYTHON_LIB_DIR/$PYTHON_LIB" \
+          -DPYTHON3_LIBRARY="$PYTHON_LIB" \
           -DOPENCV_GENERATE_PKGCONFIG=ON \
           -DCMAKE_C_COMPILER=gcc \
           -DCMAKE_CXX_COMPILER=g++ \
-          -DCMAKE_CXX_FLAGS="-Wa,-mbig-obj" \
           -DCMAKE_C_FLAGS="-Wa,-mbig-obj" \
+          -DCMAKE_CXX_FLAGS="-Wa,-mbig-obj" \
           ..
 
     - name: Build OpenCV
@@ -97,18 +92,15 @@ jobs:
         cd opencv/build
         mingw32-make install
         echo "=== Python Bindings ==="
-        find install -name "cv2*.pyd" -o -name "opencv_world*.dll"
+        find install -name "cv2*.pyd"
 
     - name: Package
       run: |
-        mkdir -p opencv/artifacts
-        cp -r opencv/build/install/* opencv/artifacts/
-        cd opencv
-        7z a opencv-gstreamer-python.7z artifacts/
+        cd opencv/build
+        7z a ../../opencv-python-build.7z install/
 
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v4
       with:
-        name: opencv-gstreamer-python-build
-        path: opencv/opencv-gstreamer-python.7z
+        name: opencv-python-gstreamer
+        path: opencv-python-build.7z
         retention-days: 30
