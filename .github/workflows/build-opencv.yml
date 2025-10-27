@@ -39,29 +39,29 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake ../opencv ^
-            -G "Visual Studio 17 2022" ^
-            -A x64 ^
-            -DCMAKE_BUILD_TYPE=Release ^
-            -DCMAKE_INSTALL_PREFIX=install ^
-            -DOPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules ^
-            -DWITH_GSTREAMER=ON ^
-            -DWITH_FFMPEG=OFF ^
-            -DWITH_QT=OFF ^
-            -DWITH_OPENGL=OFF ^
-            -DBUILD_opencv_world=OFF ^
-            -DBUILD_opencv_python3=ON ^
-            -DBUILD_opencv_python_bindings_generator=ON ^
-            -DBUILD_EXAMPLES=OFF ^
-            -DBUILD_TESTS=OFF ^
-            -DBUILD_PERF_TESTS=OFF ^
-            -DBUILD_JAVA=OFF ^
-            -DWITH_IPP=OFF ^
-            -DWITH_CUDA=OFF ^
-            -DPYTHON3_EXECUTABLE="%Python3_EXECUTABLE%" ^
-            -DPYTHON3_INCLUDE_DIR="%Python3_INCLUDE_DIR%" ^
-            -DPYTHON3_LIBRARY="%Python3_LIBRARY%" ^
-            -DPYTHON3_PACKAGES_PATH="%Python3_SITE_PACKAGES%"
+          cmake ../opencv `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_INSTALL_PREFIX=install `
+            -DOPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules `
+            -DWITH_GSTREAMER=ON `
+            -DWITH_FFMPEG=OFF `
+            -DWITH_QT=OFF `
+            -DWITH_OPENGL=OFF `
+            -DBUILD_opencv_world=OFF `
+            -DBUILD_opencv_python3=ON `
+            -DBUILD_opencv_python_bindings_generator=ON `
+            -DBUILD_EXAMPLES=OFF `
+            -DBUILD_TESTS=OFF `
+            -DBUILD_PERF_TESTS=OFF `
+            -DBUILD_JAVA=OFF `
+            -DWITH_IPP=OFF `
+            -DWITH_CUDA=OFF `
+            -DPYTHON3_EXECUTABLE="${env:Python3_EXECUTABLE}" `
+            -DPYTHON3_INCLUDE_DIR="${env:Python3_INCLUDE_DIR}" `
+            -DPYTHON3_LIBRARY="${env:Python3_LIBRARY}" `
+            -DPYTHON3_PACKAGES_PATH="${env:Python3_SITE_PACKAGES}"
         env:
           Python3_EXECUTABLE: ${{ env.pythonLocation }}\python.exe
           Python3_INCLUDE_DIR: ${{ env.pythonLocation }}\Include
