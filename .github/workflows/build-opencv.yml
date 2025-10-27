@@ -1,33 +1,41 @@
-name: Build OpenCV with GStreamer and Python (MSVC)
+name: Build OpenCV with GStreamer and Python
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main ]
 
 jobs:
   build-opencv:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout OpenCV
+        uses: actions/checkout@v4
         with:
           repository: opencv/opencv
           path: opencv
 
-      - uses: actions/checkout@v4
+      - name: Checkout OpenCV Contrib
+        uses: actions/checkout@v4
         with:
           repository: opencv/opencv_contrib
           path: opencv_contrib
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           choco install -y cmake --installargs 'ADD_CMAKE_TO_PATH=System'
           choco install -y gstreamer
+          cmake --version
+          python --version
 
-      - name: Configure OpenCV
+      - name: Configure OpenCV (CMake)
         run: |
           mkdir build
           cd build
@@ -47,6 +55,7 @@ jobs:
             -DBUILD_EXAMPLES=OFF `
             -DBUILD_TESTS=OFF `
             -DBUILD_PERF_TESTS=OFF `
+            -DBUILD_JAVA=OFF `
             -DWITH_IPP=OFF `
             -DWITH_CUDA=OFF `
             -DPYTHON3_EXECUTABLE="${env:Python3_EXECUTABLE}" `
@@ -54,18 +63,28 @@ jobs:
             -DPYTHON3_LIBRARY="${env:Python3_LIBRARY}" `
             -DPYTHON3_PACKAGES_PATH="${env:Python3_SITE_PACKAGES}"
         env:
-          Python3_EXECUTABLE: C:\hostedtoolcache\windows\Python\3.10.11\x64\python.exe
-          Python3_INCLUDE_DIR: C:\hostedtoolcache\windows\Python\3.10.11\x64\Include
-          Python3_LIBRARY: C:\hostedtoolcache\windows\Python\3.10.11\x64\libs\python310.lib
-          Python3_SITE_PACKAGES: C:\hostedtoolcache\windows\Python\3.10.11\x64\Lib\site-packages
+          Python3_EXECUTABLE: ${{ env.pythonLocation }}\python.exe
+          Python3_INCLUDE_DIR: ${{ env.pythonLocation }}\Include
+          Python3_LIBRARY: ${{ env.pythonLocation }}\libs\python310.lib
+          Python3_SITE_PACKAGES: ${{ env.pythonLocation }}\Lib\site-packages
 
-      - name: Build and install
+      - name: Build OpenCV
         run: |
           cd build
           cmake --build . --config Release --target INSTALL
 
-      - name: Locate cv2.pyd
+      - name: Verify cv2.pyd
         run: |
-          Get-ChildItem -Path "build" -Recurse -Filter "cv2*.pyd" | ForEach-Object {
-            Write-Host "✅ Found: $($_.FullName)"
+          $found = Get-ChildItem -Path "build/install" -Recurse -Filter "cv2.pyd" -ErrorAction SilentlyContinue
+          if ($found) {
+              Write-Host "✅ cv2.pyd found at $($found.FullName)"
+          } else {
+              Write-Host "❌ cv2.pyd not found!"
+              exit 1
           }
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencv-install
+          path: build/install
