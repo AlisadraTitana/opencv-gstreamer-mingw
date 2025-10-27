@@ -75,7 +75,14 @@ jobs:
 
       - name: Verify cv2.pyd
         run: |
-          dir build\install /s | findstr cv2.pyd || echo "cv2.pyd not found!"
+          $found = Get-ChildItem -Path "build/install" -Recurse -Filter "cv2.pyd" -ErrorAction SilentlyContinue
+          if ($found) {
+              Write-Host "✅ cv2.pyd found at $($found.FullName)"
+          } else {
+              Write-Host "❌ cv2.pyd not found!"
+              exit 1
+          }
+
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
