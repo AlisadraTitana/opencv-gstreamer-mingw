@@ -22,16 +22,20 @@ jobs:
           repository: opencv/opencv_contrib
           path: opencv_contrib
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+      - name: Install Python via Chocolatey
+        run: |
+          choco install python --version=3.10.11 -y --force --params "/InstallDir:C:\Python310"
+          $env:PATH = "C:\Python310;C:\Python310\Scripts;" + $env:PATH
+          python --version
+          python -c "import sys; print('Python executable:', sys.executable)"
+          python -c "import struct; print('Architecture:', struct.calcsize('P') * 8, 'bits')"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install numpy
           choco install -y cmake --installargs 'ADD_CMAKE_TO_PATH=System'
-          choco install -y gstreamer
+          choco install -y gstreamer gstreamer-dev gstreamer-rtsp-server
           cmake --version
           python --version
 
@@ -58,28 +62,28 @@ jobs:
             -DBUILD_JAVA=OFF `
             -DWITH_IPP=OFF `
             -DWITH_CUDA=OFF `
-            -DPYTHON3_EXECUTABLE="${env:Python3_EXECUTABLE}" `
-            -DPYTHON3_INCLUDE_DIR="${env:Python3_INCLUDE_DIR}" `
-            -DPYTHON3_LIBRARY="${env:Python3_LIBRARY}" `
-            -DPYTHON3_PACKAGES_PATH="${env:Python3_SITE_PACKAGES}"
-        env:
-          Python3_EXECUTABLE: ${{ env.pythonLocation }}\python.exe
-          Python3_INCLUDE_DIR: ${{ env.pythonLocation }}\Include
-          Python3_LIBRARY: ${{ env.pythonLocation }}\libs\python310.lib
-          Python3_SITE_PACKAGES: ${{ env.pythonLocation }}\Lib\site-packages
+            -DPYTHON3_EXECUTABLE="C:/Python310/python.exe" `
+            -DPYTHON3_INCLUDE_DIR="C:/Python310/include" `
+            -DPYTHON3_LIBRARY="C:/Python310/libs/python310.lib" `
+            -DPYTHON3_PACKAGES_PATH="C:/Python310/Lib/site-packages" `
+            -DINSTALL_PYTHON_EXAMPLES=OFF `
+            -DOPENCV_GENERATE_PKGCONFIG=ON
+        shell: cmd
 
       - name: Build OpenCV
         run: |
           cd build
-          cmake --build . --config Release --target INSTALL
+          cmake --build . --config Release --target INSTALL -- /m /p:Configuration=Release
 
       - name: Verify cv2.pyd
         run: |
-          $found = Get-ChildItem -Path "build/install" -Recurse -Filter "cv2.pyd" -ErrorAction SilentlyContinue
-          if ($found) {
-              Write-Host "✅ cv2.pyd found at $($found.FullName)"
+          $pyd = Get-ChildItem -Path "build/install" -Recurse -Filter "cv2.pyd" -ErrorAction SilentlyContinue
+          if ($pyd) {
+              Write-Host "cv2.pyd found at $($pyd.FullName)"
+              Write-Host "GStreamer support check:"
+              python -c "import cv2; print('OpenCV version:', cv2.__version__); print('GStreamer:', cv2.getBuildInformation().find('GStreamer: YES') != -1)"
           } else {
-              Write-Host "❌ cv2.pyd not found!"
+              Write-Host "cv2.pyd not found!"
               exit 1
           }
 
