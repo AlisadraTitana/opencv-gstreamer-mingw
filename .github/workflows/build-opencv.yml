@@ -1,59 +1,72 @@
-name: Build OpenCV with GStreamer (Python 3.9.2)
+name: Build OpenCV with GStreamer (Python 3.9.2, MSVC)
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-opencv:
+  build:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout OpenCV source
-        run: |
-          git clone https://github.com/opencv/opencv.git
-          git clone https://github.com/opencv/opencv_contrib.git
+    - name: Checkout OpenCV
+      uses: actions/checkout@v4
+      with:
+        repository: opencv/opencv
+        path: opencv
 
-      - name: Install dependencies
-        run: |
-          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
-          choco install ninja -y
-          choco install python --version=3.9.2 -y
-          choco install gstreamer gstreamer-devel -y
-          refreshenv
+    - name: Checkout OpenCV Contrib
+      uses: actions/checkout@v4
+      with:
+        repository: opencv/opencv_contrib
+        path: opencv_contrib
 
-      - name: Configure build with CMake
-        shell: cmd
-        run: |
-          mkdir build
-          cd build
-          cmake -G "Ninja" ^
-            -D CMAKE_BUILD_TYPE=Release ^
-            -D BUILD_opencv_world=ON ^
-            -D BUILD_opencv_python3=ON ^
-            -D WITH_GSTREAMER=ON ^
-            -D BUILD_EXAMPLES=OFF ^
-            -D BUILD_TESTS=OFF ^
-            -D BUILD_PERF_TESTS=OFF ^
-            -D OPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules ^
-            -D CMAKE_INSTALL_PREFIX=install ^
-            -D PYTHON_EXECUTABLE="C:/Python39/python.exe" ^
-            ../opencv
+    - name: Install dependencies
+      run: |
+        choco install -y python --version=3.9.2
+        choco install -y cmake --installargs 'ADD_CMAKE_TO_PATH=System'
+        choco install -y ninja git gstreamer gstreamer-devel visualstudio2022buildtools
 
-      - name: Build OpenCV
-        run: |
-          cd build
-          cmake --build . --config Release --target install
+    - name: Verify Python
+      run: |
+        python --version
+        where python
+        python -m pip install numpy
 
-      - name: Locate built cv2.pyd
-        id: findpyd
-        shell: pwsh
-        run: |
-          $pyd = Get-ChildItem -Path build -Recurse -Filter "cv2.pyd" | Select-Object -First 1
-          echo "Found: $($pyd.FullName)"
-          echo "pyd_path=$($pyd.FullName)" >> $env:GITHUB_OUTPUT
+    - name: Configure OpenCV with GStreamer and Python
+      shell: cmd
+      run: |
+        mkdir build
+        cd build
+        cmake -G "Visual Studio 17 2022" -A x64 ^
+          -D CMAKE_BUILD_TYPE=Release ^
+          -D BUILD_opencv_world=ON ^
+          -D BUILD_opencv_python3=ON ^
+          -D BUILD_EXAMPLES=OFF ^
+          -D BUILD_TESTS=OFF ^
+          -D BUILD_PERF_TESTS=OFF ^
+          -D WITH_GSTREAMER=ON ^
+          -D OPENCV_GENERATE_PKGCONFIG=ON ^
+          -D OPENCV_EXTRA_MODULES_PATH="../opencv_contrib/modules" ^
+          -D PYTHON_EXECUTABLE="C:/Python39/python.exe" ^
+          -D PYTHON_INCLUDE_DIR="C:/Python39/include" ^
+          -D PYTHON_LIBRARY="C:/Python39/libs/python39.lib" ^
+          -D CMAKE_INSTALL_PREFIX=install ^
+          ../opencv
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cv2_pyd_gstreamer_python39
-          path: ${{ steps.findpyd.outputs.pyd_path }}
+    - name: Build and install OpenCV
+      run: |
+        cd build
+        cmake --build . --config Release --target INSTALL
+
+    - name: List generated files
+      run: |
+        dir build\install /s | findstr cv2
+
+    - name: Upload artifact (cv2.pyd + DLLs)
+      uses: actions/upload-artifact@v4
+      with:
+        name: opencv-gstreamer-python39
+        path: |
+          build/install/python_loader/*.pyd
+          build/install/x64/vc17/bin/*.dll
+          build/install/x64/vc17/lib/*.lib
