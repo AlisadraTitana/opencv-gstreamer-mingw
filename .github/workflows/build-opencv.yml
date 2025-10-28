@@ -31,8 +31,4 @@ jobs:
 
     - name: Test OpenCV build info and FFmpeg
       run: |
-        python -c "import cv2; \
-        print('=== OpenCV Version ==='); print(cv2.__version__); \
-        build_info=cv2.getBuildInformation(); print('=== Build Info ==='); print(build_info); \
-        if 'FFMPEG: YES' in build_info: print('✅ FFmpeg is ENABLED in OpenCV 4.10'); \
-        else: print('❌ FFmpeg is NOT ENABLED in OpenCV 4.10')"
+        python -c "import cv2; print('=== OpenCV Version ==='); print(cv2.__version__); build_info=cv2.getBuildInformation(); print('=== Build Info ==='); print(build_info); print('✅ FFmpeg is ENABLED in OpenCV 4.10' if 'FFMPEG: YES' in build_info else '❌ FFmpeg is NOT ENABLED in OpenCV 4.10')"
