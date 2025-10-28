@@ -22,6 +22,7 @@ jobs:
           refreshenv
 
       - name: Configure build with CMake
+        shell: cmd
         run: |
           mkdir build
           cd build
