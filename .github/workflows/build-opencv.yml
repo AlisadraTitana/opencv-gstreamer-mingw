@@ -70,9 +70,25 @@ jobs:
         cd build
         cmake --build . --config Release --target INSTALL
 
-    - name: Check for cv2.pyd
+    - name: Check for cv2.pyd and build logs
+      shell: pwsh
       run: |
-        dir build\install /s | findstr cv2 || echo "cv2.pyd not found!"
+        Write-Host "🔎 Searching for cv2.pyd in build/install..."
+        $files = Get-ChildItem -Path "build/install" -Recurse -Filter "cv2*.pyd" -ErrorAction SilentlyContinue
+    
+        if ($files.Count -gt 0) {
+            Write-Host "✅ Found cv2.pyd:"
+            $files | ForEach-Object { Write-Host $_.FullName }
+        } else {
+            Write-Warning "❌ cv2.pyd not found in build/install!"
+            Write-Host "📂 Listing all files under build/install:"
+            Get-ChildItem -Path "build/install" -Recurse | ForEach-Object { Write-Host $_.FullName }
+    
+            Write-Host "📝 Saving full build log to build_log.txt..."
+            # اگر لاگ CMake یا MSBuild جدا نیست، خروجی این دستور کل build/install را نشان می‌دهد
+            Get-ChildItem -Path "build" -Recurse | Out-File -FilePath build_log.txt
+        }
+
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
