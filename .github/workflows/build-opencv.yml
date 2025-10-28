@@ -1,4 +1,4 @@
-name: Build OpenCV with GStreamer (Python 3.9.2, MSVC)
+name: Build OpenCV with GStreamer + Python 3.9.2 (MSVC)
 
 on:
   workflow_dispatch:
@@ -32,18 +32,18 @@ jobs:
           Rename-Item "C:\gstreamer\1.0\x86_64" "C:\gstreamer\1.0\msvc_x86_64"
         }
 
-    - name: Verify Python
+    - name: Install numpy
       run: |
-        where python
-        python --version
+        python -m pip install --upgrade pip
         python -m pip install numpy
 
     - name: Configure OpenCV with GStreamer + Python
+      shell: pwsh
       run: |
-        $PY_PATH = (Get-Command python).Source
-        $PY_DIR  = Split-Path $PY_PATH
-        $PY_INC  = "$PY_DIR\include"
-        $PY_LIB  = "$PY_DIR\libs\python39.lib"
+        $PYTHON = (Get-Command python).Source
+        $PY_DIR = Split-Path $PYTHON
+        $PY_INCLUDE = Join-Path $PY_DIR "include"
+        $PY_LIB = Join-Path $PY_DIR "libs\python39.lib"
 
         mkdir build
         cd build
@@ -56,10 +56,9 @@ jobs:
           -D BUILD_TESTS=OFF `
           -D BUILD_PERF_TESTS=OFF `
           -D WITH_GSTREAMER=ON `
-          -D OPENCV_GENERATE_PKGCONFIG=ON `
           -D OPENCV_EXTRA_MODULES_PATH="../opencv_contrib/modules" `
-          -D PYTHON_EXECUTABLE="$PY_PATH" `
-          -D PYTHON_INCLUDE_DIR="$PY_INC" `
+          -D PYTHON_EXECUTABLE="$PYTHON" `
+          -D PYTHON_INCLUDE_DIR="$PY_INCLUDE" `
           -D PYTHON_LIBRARY="$PY_LIB" `
           -D CMAKE_INSTALL_PREFIX=install `
           -D GSTREAMER_DIR="C:/gstreamer/1.0/msvc_x86_64/lib/cmake" `
@@ -70,24 +69,18 @@ jobs:
         cd build
         cmake --build . --config Release --target INSTALL
 
-    - name: Check for cv2.pyd and build logs
+    - name: Check for cv2.pyd + list DLLs
       shell: pwsh
       run: |
-        Write-Host "🔎 Searching for cv2.pyd in build/install..."
-        $files = Get-ChildItem -Path "build/install" -Recurse -Filter "cv2*.pyd" -ErrorAction SilentlyContinue
-    
-        if ($files.Count -gt 0) {
-            Write-Host "Found cv2.pyd:"
-            $files | ForEach-Object { Write-Host $_.FullName }
+        $pyds = Get-ChildItem -Path "build/install" -Recurse -Filter "cv2*.pyd" -ErrorAction SilentlyContinue
+        if ($pyds.Count -gt 0) {
+          Write-Host "cv2.pyd found:"
+          $pyds | ForEach-Object { Write-Host $_.FullName }
         } else {
-            Write-Warning "cv2.pyd not found in build/install!"
-            Write-Host "Listing all files under build/install:"
-            Get-ChildItem -Path "build/install" -Recurse | ForEach-Object { Write-Host $_.FullName }
-    
-            Write-Host "Saving full build log to build_log.txt..."
-            Get-ChildItem -Path "build" -Recurse | Out-File -FilePath build_log.txt
+          Write-Warning "cv2.pyd not found!"
+          Write-Host "Listing all DLLs in install folder:"
+          Get-ChildItem -Path "build/install" -Recurse -Filter "*.dll" | ForEach-Object { Write-Host $_.FullName }
         }
-
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
