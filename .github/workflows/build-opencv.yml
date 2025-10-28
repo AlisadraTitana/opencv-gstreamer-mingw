@@ -1,95 +1,58 @@
-name: Build OpenCV with GStreamer and Python
+name: Build OpenCV with GStreamer (Python 3.9.2)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
 
 jobs:
   build-opencv:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout OpenCV
-        uses: actions/checkout@v4
-        with:
-          repository: opencv/opencv
-          path: opencv
-
-      - name: Checkout OpenCV Contrib
-        uses: actions/checkout@v4
-        with:
-          repository: opencv/opencv_contrib
-          path: opencv_contrib
-
-      - name: Install Python via Chocolatey
+      - name: Checkout OpenCV source
         run: |
-          choco install python --version=3.10.11 -y --force --params "/InstallDir:C:\Python310"
-          $env:PATH = "C:\Python310;C:\Python310\Scripts;" + $env:PATH
-          python --version
+          git clone https://github.com/opencv/opencv.git
+          git clone https://github.com/opencv/opencv_contrib.git
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install numpy
-          choco install -y cmake --installargs 'ADD_CMAKE_TO_PATH=System'
-          choco install -y gstreamer gstreamer-dev
-          cmake --version
+          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
+          choco install ninja -y
+          choco install python --version=3.9.2 -y
+          choco install gstreamer gstreamer-devel -y
+          refreshenv
 
-      - name: Configure OpenCV (CMake)
-        shell: powershell
+      - name: Configure build with CMake
         run: |
           mkdir build
           cd build
-
-          $GSTREAMER_ROOT = "C:/gstreamer/1.0/msvc_x86_64"
-          $env:PATH += ";$GSTREAMER_ROOT/bin"
-          $env:GSTREAMER_ROOT = $GSTREAMER_ROOT
-
-          cmake ../opencv `
-            -G "Visual Studio 17 2022" `
-            -A x64 `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_INSTALL_PREFIX=install `
-            -DOPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules `
-            -DWITH_GSTREAMER=ON `
-            -DWITH_GSTREAMER_0_10=OFF `
-            -DGSTREAMER_ROOT="$GSTREAMER_ROOT" `
-            -DWITH_FFMPEG=OFF `
-            -DWITH_QT=OFF `
-            -DWITH_OPENGL=OFF `
-            -DBUILD_opencv_world=OFF `
-            -DBUILD_opencv_python3=ON `
-            -DBUILD_opencv_python_bindings_generator=ON `
-            -DBUILD_EXAMPLES=OFF `
-            -DBUILD_TESTS=OFF `
-            -DBUILD_PERF_TESTS=OFF `
-            -DBUILD_JAVA=OFF `
-            -DWITH_IPP=OFF `
-            -DWITH_CUDA=OFF `
-            -DPYTHON3_EXECUTABLE="C:/Python310/python.exe" `
-            -DPYTHON3_INCLUDE_DIR="C:/Python310/include" `
-            -DPYTHON3_LIBRARY="C:/Python310/libs/python310.lib" `
-            -DPYTHON3_PACKAGES_PATH="C:/Python310/Lib/site-packages"
+          cmake -G "Ninja" ^
+            -D CMAKE_BUILD_TYPE=Release ^
+            -D BUILD_opencv_world=ON ^
+            -D BUILD_opencv_python3=ON ^
+            -D WITH_GSTREAMER=ON ^
+            -D BUILD_EXAMPLES=OFF ^
+            -D BUILD_TESTS=OFF ^
+            -D BUILD_PERF_TESTS=OFF ^
+            -D OPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules ^
+            -D CMAKE_INSTALL_PREFIX=install ^
+            -D PYTHON_EXECUTABLE="C:/Python39/python.exe" ^
+            ../opencv
 
       - name: Build OpenCV
         run: |
           cd build
-          cmake --build . --config Release --target INSTALL -- /m
+          cmake --build . --config Release --target install
 
-      - name: Verify cv2.pyd and GStreamer
+      - name: Locate built cv2.pyd
+        id: findpyd
+        shell: pwsh
         run: |
-          $pyd = Get-ChildItem -Path "build/install" -Recurse -Filter "cv2.pyd" -ErrorAction SilentlyContinue
-          if ($pyd) {
-              Write-Host "cv2.pyd found at $($pyd.FullName)"
-              python -c "import cv2; print('OpenCV:', cv2.__version__); info = cv2.getBuildInformation(); print('GStreamer:', 'YES' if 'GStreamer: YES' in info else 'NO')"
-          } else {
-              Write-Host "cv2.pyd not found!"
-              exit 1
-          }
+          $pyd = Get-ChildItem -Path build -Recurse -Filter "cv2.pyd" | Select-Object -First 1
+          echo "Found: $($pyd.FullName)"
+          echo "pyd_path=$($pyd.FullName)" >> $env:GITHUB_OUTPUT
 
-      - name: Upload build artifacts
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: opencv-install
-          path: build/install
+          name: cv2_pyd_gstreamer_python39
+          path: ${{ steps.findpyd.outputs.pyd_path }}
