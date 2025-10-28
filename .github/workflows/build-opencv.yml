@@ -77,15 +77,14 @@ jobs:
         $files = Get-ChildItem -Path "build/install" -Recurse -Filter "cv2*.pyd" -ErrorAction SilentlyContinue
     
         if ($files.Count -gt 0) {
-            Write-Host "✅ Found cv2.pyd:"
+            Write-Host "Found cv2.pyd:"
             $files | ForEach-Object { Write-Host $_.FullName }
         } else {
-            Write-Warning "❌ cv2.pyd not found in build/install!"
-            Write-Host "📂 Listing all files under build/install:"
+            Write-Warning "cv2.pyd not found in build/install!"
+            Write-Host "Listing all files under build/install:"
             Get-ChildItem -Path "build/install" -Recurse | ForEach-Object { Write-Host $_.FullName }
     
-            Write-Host "📝 Saving full build log to build_log.txt..."
-            # اگر لاگ CMake یا MSBuild جدا نیست، خروجی این دستور کل build/install را نشان می‌دهد
+            Write-Host "Saving full build log to build_log.txt..."
             Get-ChildItem -Path "build" -Recurse | Out-File -FilePath build_log.txt
         }
 
