@@ -26,47 +26,59 @@ jobs:
         choco install -y cmake --installargs 'ADD_CMAKE_TO_PATH=System'
         choco install -y ninja git gstreamer gstreamer-devel visualstudio2022buildtools
 
+    - name: Fix GStreamer path
+      run: |
+        if (Test-Path "C:\gstreamer\1.0\x86_64") {
+          Rename-Item "C:\gstreamer\1.0\x86_64" "C:\gstreamer\1.0\msvc_x86_64"
+        }
+
     - name: Verify Python
       run: |
-        python --version
         where python
+        python --version
         python -m pip install numpy
 
-    - name: Configure OpenCV with GStreamer and Python
-      shell: cmd
+    - name: Configure OpenCV with GStreamer + Python
       run: |
+        $PY_PATH = (Get-Command python).Source
+        $PY_DIR  = Split-Path $PY_PATH
+        $PY_INC  = "$PY_DIR\include"
+        $PY_LIB  = "$PY_DIR\libs\python39.lib"
+
         mkdir build
         cd build
-        cmake -G "Visual Studio 17 2022" -A x64 ^
-          -D CMAKE_BUILD_TYPE=Release ^
-          -D BUILD_opencv_world=ON ^
-          -D BUILD_opencv_python3=ON ^
-          -D BUILD_EXAMPLES=OFF ^
-          -D BUILD_TESTS=OFF ^
-          -D BUILD_PERF_TESTS=OFF ^
-          -D WITH_GSTREAMER=ON ^
-          -D OPENCV_GENERATE_PKGCONFIG=ON ^
-          -D OPENCV_EXTRA_MODULES_PATH="../opencv_contrib/modules" ^
-          -D PYTHON_EXECUTABLE="C:/Python39/python.exe" ^
-          -D PYTHON_INCLUDE_DIR="C:/Python39/include" ^
-          -D PYTHON_LIBRARY="C:/Python39/libs/python39.lib" ^
-          -D CMAKE_INSTALL_PREFIX=install ^
+
+        cmake -G "Visual Studio 17 2022" -A x64 `
+          -D CMAKE_BUILD_TYPE=Release `
+          -D BUILD_opencv_world=ON `
+          -D BUILD_opencv_python3=ON `
+          -D BUILD_EXAMPLES=OFF `
+          -D BUILD_TESTS=OFF `
+          -D BUILD_PERF_TESTS=OFF `
+          -D WITH_GSTREAMER=ON `
+          -D OPENCV_GENERATE_PKGCONFIG=ON `
+          -D OPENCV_EXTRA_MODULES_PATH="../opencv_contrib/modules" `
+          -D PYTHON_EXECUTABLE="$PY_PATH" `
+          -D PYTHON_INCLUDE_DIR="$PY_INC" `
+          -D PYTHON_LIBRARY="$PY_LIB" `
+          -D CMAKE_INSTALL_PREFIX=install `
+          -D GSTREAMER_DIR="C:/gstreamer/1.0/msvc_x86_64/lib/cmake" `
           ../opencv
 
-    - name: Build and install OpenCV
+    - name: Build OpenCV
       run: |
         cd build
         cmake --build . --config Release --target INSTALL
 
-    - name: List generated files
+    - name: Check for cv2.pyd
       run: |
-        dir build\install /s | findstr cv2
+        dir build\install /s | findstr cv2 || echo "cv2.pyd not found!"
 
-    - name: Upload artifact (cv2.pyd + DLLs)
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: opencv-gstreamer-python39
         path: |
-          build/install/python_loader/*.pyd
-          build/install/x64/vc17/bin/*.dll
-          build/install/x64/vc17/lib/*.lib
+          build/install/**/*.pyd
+          build/install/**/*.dll
+          build/install/**/*.lib
