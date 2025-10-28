@@ -1,92 +1,43 @@
-name: Build OpenCV with GStreamer + Python 3.9.2 (MSVC)
+name: Test OpenCV FFmpeg on Windows
 
 on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  build:
+  test-opencv-windows:
     runs-on: windows-latest
 
     steps:
-    - name: Checkout OpenCV
-      uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v4
       with:
-        repository: opencv/opencv
-        path: opencv
+        python-version: '3.9'
 
-    - name: Checkout OpenCV Contrib
-      uses: actions/checkout@v4
-      with:
-        repository: opencv/opencv_contrib
-        path: opencv_contrib
+    - name: Upgrade pip
+      run: python -m pip install --upgrade pip
 
-    - name: Install dependencies
+    - name: Install OpenCV 4.10
+      run: pip install opencv-python==4.10.0
+
+    - name: Test OpenCV build info
       run: |
-        choco install -y python --version=3.9.2
-        choco install -y cmake --installargs 'ADD_CMAKE_TO_PATH=System'
-        choco install -y ninja git gstreamer gstreamer-devel visualstudio2022buildtools
-
-    - name: Fix GStreamer path
-      run: |
-        if (Test-Path "C:\gstreamer\1.0\x86_64") {
-          Rename-Item "C:\gstreamer\1.0\x86_64" "C:\gstreamer\1.0\msvc_x86_64"
-        }
-
-    - name: Install numpy
-      run: |
-        python -m pip install --upgrade pip
-        python -m pip install numpy
-
-    - name: Configure OpenCV with GStreamer + Python
-      shell: pwsh
-      run: |
-        $PYTHON = (Get-Command python).Source
-        $PY_DIR = Split-Path $PYTHON
-        $PY_INCLUDE = Join-Path $PY_DIR "include"
-        $PY_LIB = Join-Path $PY_DIR "libs\python39.lib"
-
-        mkdir build
-        cd build
-
-        cmake -G "Visual Studio 17 2022" -A x64 `
-          -D CMAKE_BUILD_TYPE=Release `
-          -D BUILD_opencv_world=ON `
-          -D BUILD_opencv_python3=ON `
-          -D BUILD_EXAMPLES=OFF `
-          -D BUILD_TESTS=OFF `
-          -D BUILD_PERF_TESTS=OFF `
-          -D WITH_GSTREAMER=ON `
-          -D OPENCV_EXTRA_MODULES_PATH="../opencv_contrib/modules" `
-          -D PYTHON_EXECUTABLE="$PYTHON" `
-          -D PYTHON_INCLUDE_DIR="$PY_INCLUDE" `
-          -D PYTHON_LIBRARY="$PY_LIB" `
-          -D CMAKE_INSTALL_PREFIX=install `
-          -D GSTREAMER_DIR="C:/gstreamer/1.0/msvc_x86_64/lib/cmake" `
-          ../opencv
-
-    - name: Build OpenCV
-      run: |
-        cd build
-        cmake --build . --config Release --target INSTALL
-
-    - name: Check for cv2.pyd + list DLLs
-      shell: pwsh
-      run: |
-        $pyds = Get-ChildItem -Path "build/install" -Recurse -Filter "cv2*.pyd" -ErrorAction SilentlyContinue
-        if ($pyds.Count -gt 0) {
-          Write-Host "cv2.pyd found:"
-          $pyds | ForEach-Object { Write-Host $_.FullName }
-        } else {
-          Write-Warning "cv2.pyd not found!"
-          Write-Host "Listing all DLLs in install folder:"
-          Get-ChildItem -Path "build/install" -Recurse -Filter "*.dll" | ForEach-Object { Write-Host $_.FullName }
-        }
-
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: opencv-gstreamer-python39
-        path: |
-          build/install/**/*.pyd
-          build/install/**/*.dll
-          build/install/**/*.lib
+        python - <<EOF
+        import cv2
+        print("=== OpenCV Version ===")
+        print(cv2.__version__)
+        print("=== Build Information ===")
+        print(cv2.getBuildInformation())
+        # Check if FFmpeg is enabled
+        build_info = cv2.getBuildInformation()
+        if "FFMPEG: YES" in build_info:
+            print("✅ FFmpeg is ENABLED in OpenCV 4.10")
+        else:
+            print("❌ FFmpeg is NOT ENABLED in OpenCV 4.10")
+        EOF
