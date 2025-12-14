@@ -72,9 +72,7 @@ jobs:
           -D CMAKE_INSTALL_PREFIX=install `
           -D OPENCV_EXTRA_MODULES_PATH=..\..\opencv_contrib\modules `
           -D BUILD_opencv_python3=ON `
-          -D PYTHON3_EXECUTABLE=$env:pythonLocation\python.exe `
-          -D PYTHON3_INCLUDE_DIR=$env:pythonLocation\include `
-          -D PYTHON3_PACKAGES_PATH=$env:pythonLocation\Lib\site-packages `
+          -D PYTHON3_EXECUTABLE=python `
           -D WITH_GSTREAMER=ON `
           -D WITH_FFMPEG=ON `
           -D OPENCV_ENABLE_NONFREE=ON `
@@ -83,6 +81,7 @@ jobs:
           -D BUILD_PERF_TESTS=OFF `
           -D GSTREAMER_DIR="C:\gstreamer\1.0\msvc_x86_64" `
           ..
+
 
     # -----------------------------
     # Build & Install
