@@ -1,9 +1,7 @@
-name: Build OpenCV with GStreamer on Windows
+name: Build OpenCV with GStreamer (Windows)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
 
 jobs:
   build:
@@ -16,13 +14,7 @@ jobs:
 
     steps:
     # -------------------------------------------------
-    # 1) Checkout
-    # -------------------------------------------------
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    # -------------------------------------------------
-    # 2) Python (مشابه python3-dev)
+    # 1) Python
     # -------------------------------------------------
     - name: Setup Python
       uses: actions/setup-python@v5
@@ -35,14 +27,15 @@ jobs:
         pip install numpy
 
     # -------------------------------------------------
-    # 3) GStreamer (معادل libgstreamer-dev)
+    # 2) GStreamer (MSVC)
     # -------------------------------------------------
-    - name: Install GStreamer MSVC
+    - name: Install GStreamer
       shell: powershell
       run: |
-        $base = "https://gstreamer.freedesktop.org/data/pkg/windows/${{ env.GSTREAMER_VERSION }}/msvc"
-        Invoke-WebRequest "$base/gstreamer-1.0-msvc-x86_64-${{ env.GSTREAMER_VERSION }}.msi" -OutFile gst.msi
-        Invoke-WebRequest "$base/gstreamer-1.0-devel-msvc-x86_64-${{ env.GSTREAMER_VERSION }}.msi" -OutFile gst-dev.msi
+        $v="${{ env.GSTREAMER_VERSION }}"
+        $base="https://gstreamer.freedesktop.org/data/pkg/windows/$v/msvc"
+        Invoke-WebRequest "$base/gstreamer-1.0-msvc-x86_64-$v.msi" -OutFile gst.msi
+        Invoke-WebRequest "$base/gstreamer-1.0-devel-msvc-x86_64-$v.msi" -OutFile gst-dev.msi
         Start-Process msiexec -ArgumentList "/i gst.msi /quiet /norestart" -Wait
         Start-Process msiexec -ArgumentList "/i gst-dev.msi /quiet /norestart" -Wait
 
@@ -51,7 +44,7 @@ jobs:
         echo "C:\gstreamer\1.0\msvc_x86_64\bin" >> $env:GITHUB_PATH
 
     # -------------------------------------------------
-    # 4) Clone OpenCV + contrib (دقیقاً مثل لینوکس)
+    # 3) Clone OpenCV
     # -------------------------------------------------
     - name: Clone OpenCV
       run: |
@@ -63,7 +56,7 @@ jobs:
         git checkout ${{ env.OPENCV_VERSION }}
 
     # -------------------------------------------------
-    # 5) CMake configure (معادل cmake لینوکس)
+    # 4) Configure (معادل cmake لینوکس)
     # -------------------------------------------------
     - name: Configure OpenCV
       shell: cmd
@@ -73,7 +66,6 @@ jobs:
 
         cmake -G "Visual Studio 17 2022" -A x64 ^
           -D CMAKE_BUILD_TYPE=Release ^
-          -D CMAKE_INSTALL_PREFIX=install ^
           -D OPENCV_EXTRA_MODULES_PATH=..\..\opencv_contrib\modules ^
           -D BUILD_opencv_python3=ON ^
           -D PYTHON3_EXECUTABLE=%pythonLocation%\python.exe ^
@@ -82,15 +74,13 @@ jobs:
           -D WITH_GSTREAMER=ON ^
           -D GSTREAMER_DIR=C:\gstreamer\1.0\msvc_x86_64 ^
           -D WITH_FFMPEG=ON ^
-          -D OPENCV_ENABLE_NONFREE=ON ^
           -D BUILD_TESTS=OFF ^
           -D BUILD_PERF_TESTS=OFF ^
           -D BUILD_EXAMPLES=OFF ^
-          -D OPENCV_GENERATE_PKGCONFIG=OFF ^
           ..
 
     # -------------------------------------------------
-    # 6) Build (make -j)
+    # 5) Build
     # -------------------------------------------------
     - name: Build OpenCV
       run: |
@@ -98,26 +88,18 @@ jobs:
         cmake --build . --config Release --parallel
 
     # -------------------------------------------------
-    # 7) Install (make install)
+    # 6) Install Python module
     # -------------------------------------------------
-    - name: Install OpenCV
-      run: |
-        cd opencv\build
-        cmake --install . --config Release
-
-    # -------------------------------------------------
-    # 8) Register Python module (cv2.pyd)
-    # -------------------------------------------------
-    - name: Install cv2 to Python
+    - name: Install cv2
       shell: powershell
       run: |
         Copy-Item opencv\build\lib\Release\cv2*.pyd `
           "$env:pythonLocation\Lib\site-packages\" -Force
 
     # -------------------------------------------------
-    # 9) Verify (معادل grep GStreamer)
+    # 7) Verify
     # -------------------------------------------------
-    - name: Verify GStreamer support
+    - name: Verify GStreamer
       run: |
         python - <<EOF
         import cv2
