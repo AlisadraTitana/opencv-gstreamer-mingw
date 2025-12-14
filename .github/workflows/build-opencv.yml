@@ -1,34 +1,117 @@
-name: Test OpenCV 4.10 FFmpeg on Windows
+name: Build OpenCV with GStreamer (Windows)
 
 on:
+  workflow_dispatch:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:
 
 jobs:
-  test-opencv-windows:
+  build:
     runs-on: windows-latest
 
+    env:
+      OPENCV_VERSION: 4.10.0
+      PYTHON_VERSION: 3.10
+      GSTREAMER_VERSION: 1.22.8
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+    # -----------------------------
+    # Checkout
+    # -----------------------------
+    - name: Checkout
+      uses: actions/checkout@v4
 
-    - name: Set up Python 3.9
-      uses: actions/setup-python@v4
+    # -----------------------------
+    # Python
+    # -----------------------------
+    - name: Setup Python
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
+        python-version: ${{ env.PYTHON_VERSION }}
 
-    - name: Upgrade pip
-      run: python -m pip install --upgrade pip
-
-    - name: Install compatible NumPy (<2)
-      run: pip install "numpy<2"
-
-    - name: Install OpenCV 4.10
-      run: pip install opencv-python==4.10.0.82
-
-    - name: Test OpenCV build info and FFmpeg
+    - name: Install Python deps
       run: |
-        python -c "import cv2; print('=== OpenCV Version ==='); print(cv2.__version__); build_info=cv2.getBuildInformation(); print('=== Build Info ==='); print(build_info); print('✅ FFmpeg is ENABLED in OpenCV 4.10' if 'FFMPEG: YES' in build_info else '❌ FFmpeg is NOT ENABLED in OpenCV 4.10')"
+        python -m pip install --upgrade pip
+        pip install numpy
+
+    # -----------------------------
+    # Install GStreamer (MSVC)
+    # -----------------------------
+    - name: Install GStreamer
+      run: |
+        curl -L -o gstreamer.exe https://gstreamer.freedesktop.org/data/pkg/windows/1.22.8/msvc/gstreamer-1.0-msvc-x86_64-1.22.8.msi
+        curl -L -o gstreamer-dev.exe https://gstreamer.freedesktop.org/data/pkg/windows/1.22.8/msvc/gstreamer-1.0-devel-msvc-x86_64-1.22.8.msi
+        msiexec /i gstreamer.exe /quiet /norestart
+        msiexec /i gstreamer-dev.exe /quiet /norestart
+
+    - name: Add GStreamer to PATH
+      run: |
+        echo "C:\gstreamer\1.0\msvc_x86_64\bin" >> $env:GITHUB_PATH
+
+    # -----------------------------
+    # Clone OpenCV
+    # -----------------------------
+    - name: Clone OpenCV
+      run: |
+        git clone https://github.com/opencv/opencv.git
+        git clone https://github.com/opencv/opencv_contrib.git
+        cd opencv
+        git checkout ${{ env.OPENCV_VERSION }}
+        cd ../opencv_contrib
+        git checkout ${{ env.OPENCV_VERSION }}
+
+    # -----------------------------
+    # CMake Configure
+    # -----------------------------
+    - name: Configure OpenCV
+      run: |
+        mkdir opencv\build
+        cd opencv\build
+
+        cmake -G "Visual Studio 17 2022" -A x64 ^
+          -D CMAKE_BUILD_TYPE=Release ^
+          -D CMAKE_INSTALL_PREFIX=install ^
+          -D OPENCV_EXTRA_MODULES_PATH=..\..\opencv_contrib\modules ^
+          -D BUILD_opencv_python3=ON ^
+          -D PYTHON3_EXECUTABLE=%pythonLocation%\python.exe ^
+          -D PYTHON3_INCLUDE_DIR=%pythonLocation%\include ^
+          -D PYTHON3_PACKAGES_PATH=%pythonLocation%\Lib\site-packages ^
+          -D WITH_GSTREAMER=ON ^
+          -D WITH_FFMPEG=ON ^
+          -D OPENCV_ENABLE_NONFREE=ON ^
+          -D BUILD_EXAMPLES=OFF ^
+          -D BUILD_TESTS=OFF ^
+          -D BUILD_PERF_TESTS=OFF ^
+          -D GSTREAMER_DIR="C:\gstreamer\1.0\msvc_x86_64" ^
+          ..
+
+    # -----------------------------
+    # Build & Install
+    # -----------------------------
+    - name: Build OpenCV
+      run: |
+        cd opencv\build
+        cmake --build . --config Release --parallel
+
+    - name: Install OpenCV
+      run: |
+        cd opencv\build
+        cmake --install . --config Release
+
+    # -----------------------------
+    # Add cv2 to Python
+    # -----------------------------
+    - name: Install cv2 Python module
+      run: |
+        copy opencv\build\lib\Release\cv2.cp310-win_amd64.pyd %pythonLocation%\Lib\site-packages\
+
+    # -----------------------------
+    # Verify
+    # -----------------------------
+    - name: Verify OpenCV + GStreamer
+      run: |
+        python - <<EOF
+        import cv2
+        print(cv2.__version__)
+        print("GStreamer:", "YES" if "GStreamer" in cv2.getBuildInformation() else "NO")
+        EOF
