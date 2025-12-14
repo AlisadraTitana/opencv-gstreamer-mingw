@@ -1,4 +1,4 @@
-name: Build OpenCV with GStreamer (Windows)
+name: Build OpenCV with GStreamer on Windows
 
 on:
   workflow_dispatch:
@@ -15,55 +15,58 @@ jobs:
       GSTREAMER_VERSION: 1.22.8
 
     steps:
-    # -----------------------------
-    # Checkout
-    # -----------------------------
+    # -------------------------------------------------
+    # 1) Checkout
+    # -------------------------------------------------
     - name: Checkout
       uses: actions/checkout@v4
 
-    # -----------------------------
-    # Python
-    # -----------------------------
+    # -------------------------------------------------
+    # 2) Python (مشابه python3-dev)
+    # -------------------------------------------------
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
         python-version: ${{ env.PYTHON_VERSION }}
 
-    - name: Install Python deps
+    - name: Python deps
       run: |
         python -m pip install --upgrade pip
         pip install numpy
 
-    # -----------------------------
-    # Install GStreamer (MSVC)
-    # -----------------------------
-    - name: Install GStreamer
+    # -------------------------------------------------
+    # 3) GStreamer (معادل libgstreamer-dev)
+    # -------------------------------------------------
+    - name: Install GStreamer MSVC
+      shell: powershell
       run: |
-        curl -L -o gstreamer.exe https://gstreamer.freedesktop.org/data/pkg/windows/1.22.8/msvc/gstreamer-1.0-msvc-x86_64-1.22.8.msi
-        curl -L -o gstreamer-dev.exe https://gstreamer.freedesktop.org/data/pkg/windows/1.22.8/msvc/gstreamer-1.0-devel-msvc-x86_64-1.22.8.msi
-        msiexec /i gstreamer.exe /quiet /norestart
-        msiexec /i gstreamer-dev.exe /quiet /norestart
+        $base = "https://gstreamer.freedesktop.org/data/pkg/windows/${{ env.GSTREAMER_VERSION }}/msvc"
+        Invoke-WebRequest "$base/gstreamer-1.0-msvc-x86_64-${{ env.GSTREAMER_VERSION }}.msi" -OutFile gst.msi
+        Invoke-WebRequest "$base/gstreamer-1.0-devel-msvc-x86_64-${{ env.GSTREAMER_VERSION }}.msi" -OutFile gst-dev.msi
+        Start-Process msiexec -ArgumentList "/i gst.msi /quiet /norestart" -Wait
+        Start-Process msiexec -ArgumentList "/i gst-dev.msi /quiet /norestart" -Wait
 
     - name: Add GStreamer to PATH
       run: |
         echo "C:\gstreamer\1.0\msvc_x86_64\bin" >> $env:GITHUB_PATH
 
-    # -----------------------------
-    # Clone OpenCV
-    # -----------------------------
+    # -------------------------------------------------
+    # 4) Clone OpenCV + contrib (دقیقاً مثل لینوکس)
+    # -------------------------------------------------
     - name: Clone OpenCV
       run: |
         git clone https://github.com/opencv/opencv.git
         git clone https://github.com/opencv/opencv_contrib.git
         cd opencv
         git checkout ${{ env.OPENCV_VERSION }}
-        cd ../opencv_contrib
+        cd ..\opencv_contrib
         git checkout ${{ env.OPENCV_VERSION }}
 
-    # -----------------------------
-    # CMake Configure
-    # -----------------------------
+    # -------------------------------------------------
+    # 5) CMake configure (معادل cmake لینوکس)
+    # -------------------------------------------------
     - name: Configure OpenCV
+      shell: cmd
       run: |
         mkdir opencv\build
         cd opencv\build
@@ -77,41 +80,48 @@ jobs:
           -D PYTHON3_INCLUDE_DIR=%pythonLocation%\include ^
           -D PYTHON3_PACKAGES_PATH=%pythonLocation%\Lib\site-packages ^
           -D WITH_GSTREAMER=ON ^
+          -D GSTREAMER_DIR=C:\gstreamer\1.0\msvc_x86_64 ^
           -D WITH_FFMPEG=ON ^
           -D OPENCV_ENABLE_NONFREE=ON ^
-          -D BUILD_EXAMPLES=OFF ^
           -D BUILD_TESTS=OFF ^
           -D BUILD_PERF_TESTS=OFF ^
-          -D GSTREAMER_DIR="C:\gstreamer\1.0\msvc_x86_64" ^
+          -D BUILD_EXAMPLES=OFF ^
+          -D OPENCV_GENERATE_PKGCONFIG=OFF ^
           ..
 
-    # -----------------------------
-    # Build & Install
-    # -----------------------------
+    # -------------------------------------------------
+    # 6) Build (make -j)
+    # -------------------------------------------------
     - name: Build OpenCV
       run: |
         cd opencv\build
         cmake --build . --config Release --parallel
 
+    # -------------------------------------------------
+    # 7) Install (make install)
+    # -------------------------------------------------
     - name: Install OpenCV
       run: |
         cd opencv\build
         cmake --install . --config Release
 
-    # -----------------------------
-    # Add cv2 to Python
-    # -----------------------------
-    - name: Install cv2 Python module
+    # -------------------------------------------------
+    # 8) Register Python module (cv2.pyd)
+    # -------------------------------------------------
+    - name: Install cv2 to Python
+      shell: powershell
       run: |
-        copy opencv\build\lib\Release\cv2.cp310-win_amd64.pyd %pythonLocation%\Lib\site-packages\
+        Copy-Item opencv\build\lib\Release\cv2*.pyd `
+          "$env:pythonLocation\Lib\site-packages\" -Force
 
-    # -----------------------------
-    # Verify
-    # -----------------------------
-    - name: Verify OpenCV + GStreamer
+    # -------------------------------------------------
+    # 9) Verify (معادل grep GStreamer)
+    # -------------------------------------------------
+    - name: Verify GStreamer support
       run: |
         python - <<EOF
         import cv2
-        print(cv2.__version__)
-        print("GStreamer:", "YES" if "GStreamer" in cv2.getBuildInformation() else "NO")
+        info = cv2.getBuildInformation()
+        print(info)
+        assert "GStreamer:                   YES" in info
         EOF
