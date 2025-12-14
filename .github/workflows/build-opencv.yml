@@ -22,31 +22,30 @@ jobs:
       uses: actions/checkout@v4
 
     # -----------------------------
-    # Python
+    # Setup Python
     # -----------------------------
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
         python-version: ${{ env.PYTHON_VERSION }}
 
-    - name: Install Python deps
+    - name: Upgrade pip and install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install numpy
+        pip install numpy wheel
 
     # -----------------------------
-    # Install GStreamer (MSVC)
+    # Install GStreamer
     # -----------------------------
     - name: Install GStreamer
       run: |
-        curl -L -o gstreamer.msi https://gstreamer.freedesktop.org/data/pkg/windows/${{ env.GSTREAMER_VERSION }}/msvc/gstreamer-1.0-msvc-x86_64-${{ env.GSTREAMER_VERSION }}.msi
-        curl -L -o gstreamer-dev.msi https://gstreamer.freedesktop.org/data/pkg/windows/${{ env.GSTREAMER_VERSION }}/msvc/gstreamer-1.0-devel-msvc-x86_64-${{ env.GSTREAMER_VERSION }}.msi
+        curl -L -o gstreamer.msi https://gstreamer.freedesktop.org/data/pkg/windows/1.22.8/msvc/gstreamer-1.0-msvc-x86_64-1.22.8.msi
+        curl -L -o gstreamer-dev.msi https://gstreamer.freedesktop.org/data/pkg/windows/1.22.8/msvc/gstreamer-1.0-devel-msvc-x86_64-1.22.8.msi
         msiexec /i gstreamer.msi /quiet /norestart
         msiexec /i gstreamer-dev.msi /quiet /norestart
 
     - name: Add GStreamer to PATH
-      run: |
-        echo "C:\gstreamer\1.0\msvc_x86_64\bin" >> $env:GITHUB_PATH
+      run: echo "C:\gstreamer\1.0\msvc_x86_64\bin" >> $env:GITHUB_PATH
 
     # -----------------------------
     # Clone OpenCV
@@ -61,7 +60,7 @@ jobs:
         git checkout ${{ env.OPENCV_VERSION }}
 
     # -----------------------------
-    # CMake Configure
+    # Configure OpenCV
     # -----------------------------
     - name: Configure OpenCV
       run: |
@@ -82,34 +81,38 @@ jobs:
           -D GSTREAMER_DIR="C:\gstreamer\1.0\msvc_x86_64" `
           ..
 
-
     # -----------------------------
-    # Build & Install
+    # Build OpenCV
     # -----------------------------
     - name: Build OpenCV
       run: |
         cd opencv\build
         cmake --build . --config Release --parallel
 
+    # -----------------------------
+    # Install OpenCV
+    # -----------------------------
     - name: Install OpenCV
       run: |
         cd opencv\build
         cmake --install . --config Release
 
     # -----------------------------
-    # Add cv2 to Python
+    # Install Python bindings (cv2)
     # -----------------------------
-    - name: Install cv2 Python module
+    - name: Build and install cv2 Python module
       run: |
-        copy opencv\build\lib\Release\cv2.cp310-win_amd64.pyd $env:pythonLocation\Lib\site-packages\
+        cd opencv\build\python
+        python setup.py bdist_wheel
+        pip install dist\*.whl
 
     # -----------------------------
-    # Verify
+    # Verify installation
     # -----------------------------
     - name: Verify OpenCV + GStreamer
       run: |
         python - <<EOF
         import cv2
-        print(cv2.__version__)
-        print("GStreamer:", "YES" if "GStreamer" in cv2.getBuildInformation() else "NO")
+        print("OpenCV version:", cv2.__version__)
+        print("GStreamer support:", "YES" if "GStreamer" in cv2.getBuildInformation() else "NO")
         EOF
